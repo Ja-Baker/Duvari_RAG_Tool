@@ -147,22 +147,45 @@ vector_index = {}
 embedding_cache = {}
 
 def load_candidate_data():
-    """Load candidate data from JSON file"""
+    """Load candidate data from JSON file with enhanced debugging"""
     global candidates_data
+    
+    # Show current working directory and available files for debugging
+    print(f"🔍 Current working directory: {os.getcwd()}")
+    
     try:
+        # List files in current directory for debugging
+        files = os.listdir('.')
+        json_files = [f for f in files if f.endswith('.json')]
+        print(f"📂 Available JSON files: {json_files}")
+        
         data_path = os.getenv('DATA_FILE_PATH', 'duvari_NFA_data.json')
+        print(f"🎯 Attempting to load data from: {data_path}")
+        
         if os.path.exists(data_path):
+            print(f"✅ Found data file at: {data_path}")
             with open(data_path, 'r', encoding='utf-8') as f:
                 candidates_data = json.load(f)
         else:
+            print(f"⚠️ Data file not found at {data_path}, trying relative path...")
             # Fallback to relative path
             with open('duvari_NFA_data.json', 'r', encoding='utf-8') as f:
                 candidates_data = json.load(f)
+            print("✅ Loaded data from relative path")
         
-        print(f"✅ Loaded {len(candidates_data)} candidates")
+        print(f"✅ Successfully loaded {len(candidates_data)} candidates")
+        
+        # Show sample of data for verification
+        if candidates_data:
+            sample = candidates_data[0]
+            print(f"📋 Sample candidate: {sample.get('FirstName', 'N/A')} {sample.get('LastName', 'N/A')}")
+            print(f"📋 Sample tags: {sample.get('Tags', [])[:3]}...")  # Show first 3 tags
+            print(f"📋 Sample location: {sample.get('City', 'N/A')}, {sample.get('State', 'N/A')}")
+        
         return True
     except Exception as e:
         print(f"❌ Error loading candidate data: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
         candidates_data = []
         return False
 
@@ -349,19 +372,26 @@ def fallback_parse(query):
     print(f"🔄 Fallback parsed query: {query} → {params}")
     return params
 
-def semantic_search(query, k=10, threshold=0.7):
-    """Perform semantic search using vector similarity"""
-    print(f"🔍 Performing semantic search for: '{query}'")
+def semantic_search(query, k=10, threshold=0.5):
+    """Perform semantic search using vector similarity with lower threshold"""
+    print(f"🔍 Performing semantic search for: '{query}' (threshold: {threshold})")
     
     # Get query embedding
     query_embedding = get_embedding(query)
     if not query_embedding:
+        print("❌ Could not get query embedding")
         return []
+    
+    print(f"🧠 Query embedding generated, searching {len(vector_index)} candidates")
     
     # Calculate similarities
     similarities = []
+    all_similarities = []  # Track all similarities for debugging
+    
     for contact_id, data in vector_index.items():
         similarity = cosine_similarity(query_embedding, data['embedding'])
+        all_similarities.append(similarity)
+        
         if similarity >= threshold:
             similarities.append({
                 'candidate': data['candidate'],
@@ -370,11 +400,38 @@ def semantic_search(query, k=10, threshold=0.7):
                 'text': data['text']
             })
     
+    # Show similarity distribution for debugging
+    if all_similarities:
+        max_sim = max(all_similarities)
+        min_sim = min(all_similarities)
+        avg_sim = sum(all_similarities) / len(all_similarities)
+        print(f"📊 Similarity stats: min={min_sim:.3f}, max={max_sim:.3f}, avg={avg_sim:.3f}")
+    
     # Sort by similarity
     similarities.sort(key=lambda x: x['similarity'], reverse=True)
     results = similarities[:k]
     
-    print(f"✅ Found {len(results)} semantic matches")
+    print(f"✅ Found {len(results)} semantic matches above threshold {threshold}")
+    
+    # If no results with threshold, try with very low threshold to get something
+    if not results and all_similarities:
+        print(f"🔄 No results with threshold {threshold}, trying with lower threshold...")
+        low_threshold = max(0.3, max(all_similarities) * 0.7)  # 70% of best match or 0.3
+        
+        for contact_id, data in vector_index.items():
+            similarity = cosine_similarity(query_embedding, data['embedding'])
+            if similarity >= low_threshold:
+                similarities.append({
+                    'candidate': data['candidate'],
+                    'similarity': similarity,
+                    'relevance_score': int(similarity * 100),
+                    'text': data['text']
+                })
+        
+        similarities.sort(key=lambda x: x['similarity'], reverse=True)
+        results = similarities[:k]
+        print(f"✅ Found {len(results)} matches with lower threshold {low_threshold:.3f}")
+    
     return results
 
 def keyword_search(query, params):
@@ -495,13 +552,13 @@ def search():
         # Parse query with OpenAI
         parsed_params = parse_search_query(query)
         
-        # Perform search based on type
+        # Perform search based on type with more lenient thresholds
         if search_type == 'semantic':
-            results = semantic_search(query, k=10, threshold=0.6)
+            results = semantic_search(query, k=10, threshold=0.4)
         elif search_type == 'keyword':
             results = keyword_search(query, parsed_params)
         else:  # hybrid
-            semantic_results = semantic_search(query, k=8, threshold=0.6)
+            semantic_results = semantic_search(query, k=8, threshold=0.4)
             keyword_results = keyword_search(query, parsed_params)
             
             # Merge results (semantic gets priority)
