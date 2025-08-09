@@ -23,17 +23,39 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client with error handling
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# Railway environment variable debugging
+print("🔍 Debugging environment variables...")
+print(f"Total environment variables: {len(os.environ)}")
+print("All environment variables:")
+for key, value in os.environ.items():
+    if 'OPENAI' in key.upper():
+        print(f"  {key}: {value[:20]}..." if len(value) > 20 else f"  {key}: {value}")
+    elif key in ['PORT', 'RAILWAY_', 'PATH']:
+        print(f"  {key}: {value[:50]}..." if len(value) > 50 else f"  {key}: {value}")
+
+# Multiple ways to get OpenAI API key for Railway compatibility
+OPENAI_API_KEY = None
+possible_keys = ['OPENAI_API_KEY', 'openai_api_key', 'OPENAI_KEY']
+
+for key in possible_keys:
+    value = os.getenv(key) or os.environ.get(key)
+    if value:
+        OPENAI_API_KEY = value
+        print(f"✅ Found OpenAI API key via {key}: {value[:20]}...")
+        break
+
 if not OPENAI_API_KEY:
     print("❌ ERROR: OPENAI_API_KEY not found in environment variables")
-    print("Available env vars:", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
-else:
-    print(f"✅ OpenAI API key found: {OPENAI_API_KEY[:20]}...")
+    print("Available env vars containing 'OPENAI':", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
+    print("All env var keys:", list(os.environ.keys())[:10])  # Show first 10 keys
 
 try:
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    print("✅ OpenAI client initialized successfully")
+    if OPENAI_API_KEY:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ OpenAI client initialized successfully")
+    else:
+        client = None
+        print("⚠️ OpenAI client not initialized - no API key found")
 except Exception as e:
     print(f"❌ Error initializing OpenAI client: {e}")
     client = None
@@ -493,12 +515,16 @@ def get_stats():
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
+    """Health check endpoint with detailed debugging"""
     return jsonify({
         'status': 'healthy',
         'candidates_loaded': len(candidates_data),
         'vector_index_ready': len(vector_index) > 0,
-        'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+        'openai_configured': bool(OPENAI_API_KEY),
+        'openai_client_ready': client is not None,
+        'total_env_vars': len(os.environ),
+        'openai_env_vars': [k for k in os.environ.keys() if 'OPENAI' in k.upper()],
+        'port': os.getenv('PORT', 'not set'),
         'timestamp': datetime.now().isoformat()
     })
 
