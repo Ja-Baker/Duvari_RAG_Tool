@@ -40,6 +40,8 @@ for key, value in os.environ.items():
         print(f"  {key}: {value[:20]}..." if len(value) > 20 else f"  {key}: {value}")
     elif key in ['PORT', 'RAILWAY_', 'PATH']:
         print(f"  {key}: {value[:50]}..." if len(value) > 50 else f"  {key}: {value}")
+    elif 'PROXY' in key.upper():
+        print(f"  {key}: {value[:50]}..." if len(value) > 50 else f"  {key}: {value}")
 
 # Multiple ways to get OpenAI API key for Railway compatibility
 OPENAI_API_KEY = None
@@ -67,38 +69,60 @@ def initialize_openai_client():
         print("❌ OpenAI library not available")
         return None
     
-    # Method 1: Standard initialization
+    # Clear any proxy-related environment variables that might interfere
+    proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+    original_proxy_values = {}
+    
+    for var in proxy_vars:
+        if var in os.environ:
+            original_proxy_values[var] = os.environ[var]
+            print(f"🔄 Temporarily removing proxy env var: {var}")
+            del os.environ[var]
+    
     try:
-        print("🔄 Method 1: Standard OpenAI client initialization...")
+        # Method 1: Clean initialization without any proxy interference
+        print("🔄 Method 1: Clean OpenAI client initialization...")
         client = OpenAI(api_key=OPENAI_API_KEY)
-        print("✅ Standard OpenAI client initialization successful")
+        print("✅ Clean OpenAI client initialization successful")
         return client
     except Exception as e:
         print(f"❌ Method 1 failed: {e}")
     
-    # Method 2: With explicit parameters
     try:
-        print("🔄 Method 2: OpenAI client with explicit parameters...")
+        # Method 2: Force no proxy configuration
+        print("🔄 Method 2: OpenAI client with explicit no-proxy configuration...")
+        import httpx
+        
+        # Create a custom HTTP client with no proxy
+        http_client = httpx.Client(proxies={})
+        
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            http_client=http_client
+        )
+        print("✅ No-proxy OpenAI client initialization successful")
+        return client
+    except Exception as e:
+        print(f"❌ Method 2 failed: {e}")
+    
+    try:
+        # Method 3: Use requests-based approach
+        print("🔄 Method 3: Alternative HTTP client initialization...")
         client = OpenAI(
             api_key=OPENAI_API_KEY,
             timeout=30.0,
             max_retries=2
         )
-        print("✅ Method 2 OpenAI client initialization successful")
-        return client
-    except Exception as e:
-        print(f"❌ Method 2 failed: {e}")
-    
-    # Method 3: Minimal initialization
-    try:
-        print("🔄 Method 3: Minimal OpenAI client initialization...")
-        import openai
-        openai.api_key = OPENAI_API_KEY
-        client = OpenAI(OPENAI_API_KEY)
-        print("✅ Method 3 OpenAI client initialization successful")
+        print("✅ Alternative HTTP client initialization successful")
         return client
     except Exception as e:
         print(f"❌ Method 3 failed: {e}")
+    
+    finally:
+        # Restore proxy environment variables
+        for var, value in original_proxy_values.items():
+            os.environ[var] = value
+            print(f"🔄 Restored proxy env var: {var}")
     
     print("❌ All OpenAI client initialization methods failed")
     return None
