@@ -15,8 +15,20 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# Initialize OpenAI client with error handling
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    print("❌ ERROR: OPENAI_API_KEY not found in environment variables")
+    print("Available env vars:", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
+else:
+    print(f"✅ OpenAI API key found: {OPENAI_API_KEY[:20]}...")
+
+try:
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    print("✅ OpenAI client initialized successfully")
+except Exception as e:
+    print(f"❌ Error initializing OpenAI client: {e}")
+    client = None
 
 # Global variables for RAG system
 candidates_data = []
@@ -58,6 +70,10 @@ def candidate_to_text(candidate):
 
 def get_embedding(text):
     """Get OpenAI embedding for text with caching"""
+    if not client:
+        print("❌ OpenAI client not available")
+        return None
+        
     text_hash = hashlib.md5(text.encode()).hexdigest()
     
     if text_hash in embedding_cache:
@@ -103,6 +119,10 @@ def build_vector_index():
 
 def parse_search_query(query):
     """Parse natural language query using OpenAI"""
+    if not client:
+        print("❌ OpenAI client not available, using fallback parsing")
+        return fallback_parse(query)
+        
     system_prompt = """You are a job search query parser. Convert natural language queries into structured parameters for searching a job applicant database.
 
 Return a JSON object with these possible fields:
@@ -148,7 +168,64 @@ Only include fields that are explicitly mentioned."""
         
     except Exception as e:
         print(f"❌ Error parsing query: {e}")
-        return {}
+        return fallback_parse(query)
+
+def fallback_parse(query):
+    """Basic keyword extraction as fallback when OpenAI is unavailable"""
+    query_lower = query.lower()
+    params = {}
+    
+    # Common skills to look for
+    skills = ['python', 'java', 'javascript', 'react', 'node.js', 'nodejs', 'aws', 
+             'azure', 'devops', 'terraform', 'docker', 'kubernetes', 'sql', 'mongodb',
+             'angular', 'vue', 'django', 'flask', 'spring', '.net', 'c#', 'c++',
+             'golang', 'go', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'linux',
+             'machine learning', 'ml', 'ai', 'tensorflow', 'pytorch']
+    
+    found_skills = []
+    for skill in skills:
+        if skill in query_lower:
+            # Normalize skill names
+            if skill == 'nodejs':
+                found_skills.append('Node.js')
+            elif skill == 'golang':
+                found_skills.append('Go')
+            elif skill == 'machine learning' or skill == 'ml':
+                found_skills.append('Machine Learning')
+            else:
+                found_skills.append(skill.title())
+    
+    if found_skills:
+        params['skills'] = list(set(found_skills))  # Remove duplicates
+    
+    # Check for experience levels
+    if any(word in query_lower for word in ['senior', 'sr.', 'lead', 'principal']):
+        params['title'] = 'senior'
+    elif any(word in query_lower for word in ['junior', 'jr.', 'entry']):
+        params['title'] = 'junior'
+    elif 'mid' in query_lower:
+        params['title'] = 'mid-level'
+    
+    # Check for remote
+    if 'remote' in query_lower:
+        params['remote'] = True
+    
+    # Check for years of experience
+    import re
+    exp_pattern = r'(\d+)\+?\s*years?'
+    exp_match = re.search(exp_pattern, query_lower)
+    if exp_match:
+        params['experience_min'] = int(exp_match.group(1))
+    
+    # Check for locations
+    states = ['vermont', 'california', 'new york', 'texas', 'florida', 'massachusetts']
+    for state in states:
+        if state in query_lower:
+            params['location'] = state.title()
+            break
+    
+    print(f"🔄 Fallback parsed query: {query} → {params}")
+    return params
 
 def semantic_search(query, k=10, threshold=0.7):
     """Perform semantic search using vector similarity"""
@@ -238,6 +315,11 @@ def format_results(candidates, query):
     """Format search results using OpenAI"""
     if not candidates:
         return "I couldn't find any candidates matching your criteria. Try adjusting your search terms."
+
+    # If OpenAI client is not available, use basic formatting
+    if not client:
+        count = len(candidates)
+        return f"Found {count} candidate{'s' if count != 1 else ''} matching '{query}'. Results include candidates with relevant skills and experience levels."
 
     system_prompt = """You are a helpful recruitment assistant. Format the candidate search results in a conversational, professional manner.
 
