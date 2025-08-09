@@ -2,12 +2,20 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import os
 import json
-import numpy as np
+import math
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import time
 import hashlib
+
+# Try to import numpy, fall back to math if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    print("⚠️  NumPy not available, using math library for calculations")
+    NUMPY_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -94,9 +102,20 @@ def get_embedding(text):
 
 def cosine_similarity(a, b):
     """Calculate cosine similarity between two vectors"""
-    a = np.array(a)
-    b = np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    if NUMPY_AVAILABLE:
+        a = np.array(a)
+        b = np.array(b)
+        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    else:
+        # Pure Python implementation
+        dot_product = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a))
+        norm_b = math.sqrt(sum(x * x for x in b))
+        
+        if norm_a == 0 or norm_b == 0:
+            return 0
+        
+        return dot_product / (norm_a * norm_b)
 
 def build_vector_index():
     """Build vector index for all candidates"""
