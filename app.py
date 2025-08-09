@@ -5,9 +5,17 @@ import json
 import math
 from datetime import datetime
 from dotenv import load_dotenv
-from openai import OpenAI
 import time
 import hashlib
+
+# Import OpenAI with debugging
+try:
+    from openai import OpenAI
+    import openai
+    print(f"✅ OpenAI library imported successfully - version: {openai.__version__}")
+except ImportError as e:
+    print(f"❌ Failed to import OpenAI library: {e}")
+    OpenAI = None
 
 # Try to import numpy, fall back to math if not available
 try:
@@ -49,16 +57,65 @@ if not OPENAI_API_KEY:
     print("Available env vars containing 'OPENAI':", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
     print("All env var keys:", list(os.environ.keys())[:10])  # Show first 10 keys
 
-try:
-    if OPENAI_API_KEY:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        print("✅ OpenAI client initialized successfully")
-    else:
-        client = None
+def initialize_openai_client():
+    """Initialize OpenAI client with multiple fallback methods"""
+    if not OPENAI_API_KEY:
         print("⚠️ OpenAI client not initialized - no API key found")
-except Exception as e:
-    print(f"❌ Error initializing OpenAI client: {e}")
-    client = None
+        return None
+    
+    if not OpenAI:
+        print("❌ OpenAI library not available")
+        return None
+    
+    # Method 1: Standard initialization
+    try:
+        print("🔄 Method 1: Standard OpenAI client initialization...")
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ Standard OpenAI client initialization successful")
+        return client
+    except Exception as e:
+        print(f"❌ Method 1 failed: {e}")
+    
+    # Method 2: With explicit parameters
+    try:
+        print("🔄 Method 2: OpenAI client with explicit parameters...")
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=30.0,
+            max_retries=2
+        )
+        print("✅ Method 2 OpenAI client initialization successful")
+        return client
+    except Exception as e:
+        print(f"❌ Method 2 failed: {e}")
+    
+    # Method 3: Minimal initialization
+    try:
+        print("🔄 Method 3: Minimal OpenAI client initialization...")
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        client = OpenAI(OPENAI_API_KEY)
+        print("✅ Method 3 OpenAI client initialization successful")
+        return client
+    except Exception as e:
+        print(f"❌ Method 3 failed: {e}")
+    
+    print("❌ All OpenAI client initialization methods failed")
+    return None
+
+# Initialize OpenAI client
+client = initialize_openai_client()
+
+if client:
+    print("✅ OpenAI client ready for use")
+    # Quick test
+    try:
+        models = client.models.list()
+        print("✅ OpenAI client API test successful")
+    except Exception as test_error:
+        print(f"⚠️ OpenAI client API test failed: {test_error}")
+else:
+    print("❌ OpenAI client not available - RAG functionality will be limited")
 
 # Global variables for RAG system
 candidates_data = []
