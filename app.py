@@ -31,25 +31,24 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Custom JSON encoder to handle NumPy types
-import json
-from flask.json import JSONEncoder
-
-class CustomJSONEncoder(JSONEncoder):
-    def default(self, obj):
-        if NUMPY_AVAILABLE:
-            import numpy as np
-            if isinstance(obj, np.bool_):
-                return bool(obj)
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-        return super().default(obj)
-
-app.json_encoder = CustomJSONEncoder
+# Helper function to convert NumPy types (simpler approach)
+def ensure_json_serializable(data):
+    """Recursively convert NumPy types to Python native types"""
+    if NUMPY_AVAILABLE:
+        import numpy as np
+        if isinstance(data, np.bool_):
+            return bool(data)
+        elif isinstance(data, np.integer):
+            return int(data)
+        elif isinstance(data, np.floating):
+            return float(data)
+        elif isinstance(data, np.ndarray):
+            return data.tolist()
+        elif isinstance(data, list):
+            return [ensure_json_serializable(item) for item in data]
+        elif isinstance(data, dict):
+            return {key: ensure_json_serializable(value) for key, value in data.items()}
+    return data
 
 # Railway environment variable debugging
 print("INFO: Debugging environment variables...")
@@ -687,7 +686,7 @@ def search():
         }
         
         print(f"SUCCESS: Search completed: {len(candidates)} candidates found")
-        return jsonify(response_data)
+        return jsonify(ensure_json_serializable(response_data))
         
     except Exception as e:
         print(f"ERROR: Search error: {e}")
@@ -711,7 +710,7 @@ def rag_search():
         results = semantic_search(query, k=k, threshold=threshold)
         search_time = (time.time() - start_time) * 1000
         
-        return jsonify({
+        rag_response = {
             'query': query,
             'results': results,
             'count': len(results),
@@ -721,7 +720,9 @@ def rag_search():
                 'total_vectors': len(vector_index),
                 'cache_size': len(embedding_cache)
             }
-        })
+        }
+        
+        return jsonify(ensure_json_serializable(rag_response))
         
     except Exception as e:
         print(f"ERROR: RAG search error: {e}")
