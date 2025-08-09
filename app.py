@@ -244,14 +244,24 @@ def cosine_similarity(a, b):
         return dot_product / (norm_a * norm_b)
 
 def build_vector_index():
-    """Build vector index for all candidates"""
+    """Build vector index for all candidates - THIS MAKES OPENAI API CALLS"""
     global vector_index
     print("🔧 Building vector index...")
+    print(f"🔧 Processing {len(candidates_data)} candidates...")
     
-    for candidate in candidates_data:
+    if not client:
+        print("❌ No OpenAI client available - cannot build vector index")
+        return
+    
+    successful_embeddings = 0
+    failed_embeddings = 0
+    
+    for i, candidate in enumerate(candidates_data):
         contact_id = candidate.get('ContactId')
         if contact_id:
             text = candidate_to_text(candidate)
+            print(f"🔄 [{i+1}/{len(candidates_data)}] Processing: {candidate.get('FirstName', 'Unknown')} {candidate.get('LastName', 'Unknown')}")
+            
             embedding = get_embedding(text)
             if embedding:
                 vector_index[contact_id] = {
@@ -259,8 +269,20 @@ def build_vector_index():
                     'candidate': candidate,
                     'text': text
                 }
+                successful_embeddings += 1
+                print(f"✅ [{i+1}/{len(candidates_data)}] Embedding created successfully")
+            else:
+                failed_embeddings += 1
+                print(f"❌ [{i+1}/{len(candidates_data)}] Failed to create embedding")
+        
+        # Show progress every 10 candidates
+        if (i + 1) % 10 == 0:
+            print(f"📊 Progress: {i+1}/{len(candidates_data)} processed, {successful_embeddings} successful, {failed_embeddings} failed")
     
-    print(f"✅ Built vector index with {len(vector_index)} candidates")
+    print(f"✅ Vector index build complete!")
+    print(f"📊 Final stats: {successful_embeddings} successful embeddings, {failed_embeddings} failed")
+    print(f"📊 Vector index size: {len(vector_index)} candidates")
+    print(f"💰 OpenAI API calls made: {successful_embeddings} embedding requests")
 
 def parse_search_query(query):
     """Parse natural language query using OpenAI"""
@@ -679,26 +701,26 @@ def rebuild_index():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Initialize system on startup
+# Initialize system on startup (runs for both gunicorn and direct execution)
+print("🚀 Starting Duvari RAG Candidate Search System...")
+
+# Load data
+if load_candidate_data():
+    print("✅ Candidate data loaded")
+else:
+    print("❌ Failed to load candidate data")
+
+# Build vector index (this will make OpenAI API calls!)
+if candidates_data:
+    build_vector_index()
+    print("✅ Vector index built")
+else:
+    print("⚠️  No candidates to index")
+
+print(f"🎯 System ready with {len(candidates_data)} candidates and {len(vector_index)} vectors")
+
+# Only run Flask directly if called as main script
 if __name__ == '__main__':
-    print("🚀 Starting Duvari RAG Candidate Search System...")
-    
-    # Load data
-    if load_candidate_data():
-        print("✅ Candidate data loaded")
-    else:
-        print("❌ Failed to load candidate data")
-    
-    # Build vector index
-    if candidates_data:
-        build_vector_index()
-        print("✅ Vector index built")
-    else:
-        print("⚠️  No candidates to index")
-    
-    print(f"🎯 System ready with {len(candidates_data)} candidates and {len(vector_index)} vectors")
-    print("🌐 Starting Flask server...")
-    
-    # Run the app
+    print("🌐 Starting Flask server directly...")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
