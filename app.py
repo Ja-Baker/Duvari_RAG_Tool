@@ -433,10 +433,10 @@ def semantic_search(query, k=10, threshold=0.5, parsed_params=None):
                 relevant_candidates.append(candidate)
         print(f"INFO: Pre-filtered to {len(relevant_candidates)} relevant candidates")
     
-    # If no keyword matches, use a broader set but limit to reasonable size
-    if not relevant_candidates:
-        print("INFO: No keyword matches, using broader candidate set")
-        # Limit to first 50 candidates to control costs
+    # If no keyword matches or too many matches, use a limited set to control costs
+    if not relevant_candidates or len(relevant_candidates) > 100:
+        print("INFO: Using limited candidate set to control costs")
+        # Limit to first 50 candidates to control costs and API usage
         relevant_candidates = candidates_data[:min(50, len(candidates_data))]
         print(f"INFO: Using {len(relevant_candidates)} candidates for semantic search")
     
