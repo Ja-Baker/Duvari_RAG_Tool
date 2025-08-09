@@ -31,6 +31,26 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+# Custom JSON encoder to handle NumPy types
+import json
+from flask.json import JSONEncoder
+
+class CustomJSONEncoder(JSONEncoder):
+    def default(self, obj):
+        if NUMPY_AVAILABLE:
+            import numpy as np
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+        return super().default(obj)
+
+app.json_encoder = CustomJSONEncoder
+
 # Railway environment variable debugging
 print("INFO: Debugging environment variables...")
 print(f"Total environment variables: {len(os.environ)}")
@@ -642,13 +662,13 @@ def search():
                 if len(results) >= 10:  # Limit to top 10
                     break
         
-        # Extract just candidates for response
+        # Extract just candidates for response (ensure native Python types)
         candidates = [r.get('candidate', r) for r in results]
-        similarities = [r.get('similarity', 0) for r in results]
-        relevance_scores = [r.get('relevance_score', 0) for r in results]
+        similarities = [float(r.get('similarity', 0)) for r in results]
+        relevance_scores = [int(r.get('relevance_score', 0)) for r in results]
         
-        # Mark results as AI certified if they came from semantic search
-        ai_certified = [search_type in ['semantic', 'hybrid'] and r.get('similarity', 0) > 0 for r in results]
+        # Mark results as AI certified if they came from semantic search (ensure native Python bool)
+        ai_certified = [bool(search_type in ['semantic', 'hybrid'] and r.get('similarity', 0) > 0) for r in results]
         
         response_data = {
             'query': query,
