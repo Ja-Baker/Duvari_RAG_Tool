@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duvari AI Candidate Search - RAG Powered</title>
+    <title>Duvari - AI-Powered Candidate Search Platform</title>
     <style>
         * {
             margin: 0;
@@ -262,9 +262,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🧠 Duvari AI Candidate Search</h1>
-            <div class="subtitle">Powered by OpenAI RAG Technology</div>
-            <div class="tech-stack">GPT-3.5 • Vector Embeddings • Semantic Search • Neural Matching</div>
+            <h1>Duvari</h1>
+            <div class="subtitle">AI-Powered Candidate Search Platform</div>
+            <div class="tech-stack">Advanced Natural Language Processing • Semantic Matching • Intelligent Search</div>
         </div>
         
         <div class="search-container">
@@ -273,10 +273,10 @@
                     🔀 Hybrid Search
                 </button>
                 <button class="search-type-btn" onclick="setSearchType('semantic')" data-type="semantic">
-                    🧠 Semantic AI
+                    Semantic AI
                 </button>
                 <button class="search-type-btn" onclick="setSearchType('keyword')" data-type="keyword">
-                    🔍 Keyword
+                    Keyword
                 </button>
             </div>
             
@@ -289,7 +289,7 @@
                     onkeypress="handleKeyPress(event)"
                 >
                 <button onclick="performSearch()" class="search-btn" id="searchBtn">
-                    🚀 AI Search
+                    Search
                 </button>
             </div>
             
@@ -314,7 +314,7 @@
                 <strong>Search Time:</strong> <span id="searchTime">-</span>
             </div>
             <div class="stats-item">
-                <strong>AI Processing:</strong> <span id="aiProcessing">✅ Active</span>
+                <strong>AI Processing:</strong> <span id="aiProcessing">Active</span>
             </div>
             <div class="stats-item">
                 <strong>Vector Index:</strong> <span id="vectorCount">-</span>
@@ -324,7 +324,7 @@
         <div class="results-container" id="resultsContainer">
             <div class="loading" id="loadingIndicator" style="display: none;">
                 <div class="spinner"></div>
-                <p>🧠 AI is analyzing candidates...</p>
+                <p>AI is analyzing candidates...</p>
             </div>
             
             <div id="resultsContent"></div>
@@ -368,7 +368,7 @@
             
             // Show loading state
             searchBtn.disabled = true;
-            searchBtn.textContent = '🧠 AI Processing...';
+            searchBtn.textContent = 'Processing...';
             resultsContainer.style.display = 'block';
             loadingIndicator.style.display = 'block';
             resultsContent.innerHTML = '';
@@ -406,7 +406,7 @@
             } finally {
                 // Reset button state
                 searchBtn.disabled = false;
-                searchBtn.textContent = '🚀 AI Search';
+                searchBtn.textContent = 'Search';
                 loadingIndicator.style.display = 'none';
             }
         }
@@ -420,7 +420,7 @@
             
             let html = `
                 <div class="results-header">
-                    <h2>🎯 Search Results</h2>
+                    <h2>Search Results</h2>
                     <p>${data.count} candidate${data.count !== 1 ? 's' : ''} found using <strong>${data.search_type}</strong> search</p>
                 </div>
             `;
@@ -429,7 +429,7 @@
             if (data.formatted_response) {
                 html += `
                     <div class="ai-response">
-                        <strong>🧠 AI Analysis:</strong><br>
+                        <strong>AI Analysis:</strong><br>
                         ${data.formatted_response.replace(/\n/g, '<br>')}
                     </div>
                 `;
@@ -454,11 +454,11 @@
                                 <div><strong>📧 Email:</strong> ${candidate.Email}</div>
                                 <div><strong>📅 Availability:</strong> ${candidate.Availability}</div>
                                 <div><strong>📊 Status:</strong> ${candidate.Status}</div>
-                                <div><strong>🎯 Similarity:</strong> ${(similarity * 100).toFixed(1)}%</div>
+                                <div><strong>Similarity:</strong> ${(similarity * 100).toFixed(1)}%</div>
                             </div>
                             
                             <div style="margin: 10px 0;">
-                                <strong>🛠️ Skills:</strong>
+                                <strong>Skills:</strong>
                             </div>
                             <div class="candidate-skills">
                                 ${(candidate.Tags || []).map(tag => 
@@ -474,7 +474,7 @@
             if (data.parsed_params && Object.keys(data.parsed_params).length > 0) {
                 html += `
                     <div style="margin-top: 20px; padding: 15px; background: #f0f4ff; border-radius: 8px;">
-                        <strong>🧠 AI Query Understanding:</strong><br>
+                        <strong>AI Query Understanding:</strong><br>
                         <code>${JSON.stringify(data.parsed_params, null, 2)}</code>
                     </div>
                 `;
@@ -490,7 +490,7 @@
                 const health = await response.json();
                 
                 if (health.vector_index_ready) {
-                    document.getElementById('aiProcessing').textContent = '✅ Ready';
+                    document.getElementById('aiProcessing').textContent = 'Ready';
                 }
             } catch (error) {
                 console.error('Health check failed:', error);

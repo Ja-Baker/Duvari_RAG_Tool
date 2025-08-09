@@ -9,7 +9,7 @@ import sys
 
 def validate_environment():
     """Validate required environment variables with Railway debugging"""
-    print("🔍 Validating environment variables...")
+    print("INFO: Validating environment variables...")
     print(f"Total environment variables: {len(os.environ)}")
     
     # Show all environment variables for debugging
@@ -28,33 +28,33 @@ def validate_environment():
     for var in ['OPENAI_API_KEY', 'openai_api_key', 'OPENAI_KEY']:
         value = os.getenv(var) or os.environ.get(var)
         if value:
-            print(f"✅ Found OpenAI key via {var}: {'*' * 20}...{value[-10:]}")
+            print(f"SUCCESS: Found OpenAI key via {var}: {'*' * 20}...{value[-10:]}")
             openai_key_found = True
             break
     
     if not openai_key_found:
-        print("❌ OPENAI_API_KEY: NOT FOUND in any variation")
+        print("ERROR: OPENAI_API_KEY: NOT FOUND in any variation")
         print("Available keys containing 'OPENAI':", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
         # Continue anyway to see what happens
     
     for var in optional_vars:
         value = os.getenv(var)
         if value:
-            print(f"✅ {var}: {value}")
+            print(f"SUCCESS: {var}: {value}")
         else:
-            print(f"⚠️  {var}: Using default")
+            print(f"INFO: {var}: Using default")
     
     return True  # Continue even without OpenAI key for debugging
 
 if __name__ == "__main__":
-    print("🚀 Starting Duvari RAG System...")
+    print("INFO: Starting Duvari RAG System...")
     print("=" * 50)
     
     # Validate environment
     validate_environment()
     
     print("=" * 50)
-    print("🚀 Starting Flask application with gunicorn...")
+    print("INFO: Starting Flask application with gunicorn...")
     
     # Use gunicorn for production
     import subprocess

@@ -12,9 +12,9 @@ import hashlib
 try:
     from openai import OpenAI
     import openai
-    print(f"✅ OpenAI library imported successfully - version: {openai.__version__}")
+    print(f"INFO: OpenAI library imported successfully - version: {openai.__version__}")
 except ImportError as e:
-    print(f"❌ Failed to import OpenAI library: {e}")
+    print(f"ERROR: Failed to import OpenAI library: {e}")
     OpenAI = None
 
 # Try to import numpy, fall back to math if not available
@@ -22,7 +22,7 @@ try:
     import numpy as np
     NUMPY_AVAILABLE = True
 except ImportError:
-    print("⚠️  NumPy not available, using math library for calculations")
+    print("WARNING: NumPy not available, using math library for calculations")
     NUMPY_AVAILABLE = False
 
 # Load environment variables
@@ -32,9 +32,9 @@ app = Flask(__name__)
 CORS(app)
 
 # Railway environment variable debugging
-print("🔍 Debugging environment variables...")
+print("INFO: Debugging environment variables...")
 print(f"Total environment variables: {len(os.environ)}")
-print("All environment variables:")
+print("Environment variables summary:")
 for key, value in os.environ.items():
     if 'OPENAI' in key.upper():
         print(f"  {key}: {value[:20]}..." if len(value) > 20 else f"  {key}: {value}")
@@ -51,22 +51,22 @@ for key in possible_keys:
     value = os.getenv(key) or os.environ.get(key)
     if value:
         OPENAI_API_KEY = value
-        print(f"✅ Found OpenAI API key via {key}: {value[:20]}...")
+        print(f"SUCCESS: Found OpenAI API key via {key}: {value[:20]}...")
         break
 
 if not OPENAI_API_KEY:
-    print("❌ ERROR: OPENAI_API_KEY not found in environment variables")
+    print("ERROR: OPENAI_API_KEY not found in environment variables")
     print("Available env vars containing 'OPENAI':", [k for k in os.environ.keys() if 'OPENAI' in k.upper()])
     print("All env var keys:", list(os.environ.keys())[:10])  # Show first 10 keys
 
 def initialize_openai_client():
     """Initialize OpenAI client with multiple fallback methods"""
     if not OPENAI_API_KEY:
-        print("⚠️ OpenAI client not initialized - no API key found")
+        print("WARNING: OpenAI client not initialized - no API key found")
         return None
     
     if not OpenAI:
-        print("❌ OpenAI library not available")
+        print("ERROR: OpenAI library not available")
         return None
     
     # Clear any proxy-related environment variables that might interfere
@@ -76,25 +76,25 @@ def initialize_openai_client():
     for var in proxy_vars:
         if var in os.environ:
             original_proxy_values[var] = os.environ[var]
-            print(f"🔄 Temporarily removing proxy env var: {var}")
+            print(f"INFO: Temporarily removing proxy env var: {var}")
             del os.environ[var]
     
     try:
         # Method 1: Clean initialization without any proxy interference
-        print("🔄 Method 1: Clean OpenAI client initialization...")
+        print("INFO: Method 1: Clean OpenAI client initialization...")
         client = OpenAI(
             api_key=OPENAI_API_KEY,
             timeout=60.0,  # Increase timeout for Railway
             max_retries=3
         )
-        print("✅ Clean OpenAI client initialization successful")
+        print("SUCCESS: Clean OpenAI client initialization successful")
         return client
     except Exception as e:
-        print(f"❌ Method 1 failed: {e}")
+        print(f"ERROR: Method 1 failed: {e}")
     
     try:
         # Method 2: Custom HTTP client with Railway-friendly settings
-        print("🔄 Method 2: Railway-optimized HTTP client...")
+        print("INFO: Method 2: Railway-optimized HTTP client...")
         import httpx
         
         # Create HTTP client with extended timeouts for Railway
@@ -110,27 +110,27 @@ def initialize_openai_client():
             http_client=http_client,
             max_retries=5
         )
-        print("✅ Railway-optimized client initialization successful")
+        print("SUCCESS: Railway-optimized client initialization successful")
         return client
     except Exception as e:
-        print(f"❌ Method 2 failed: {e}")
+        print(f"ERROR: Method 2 failed: {e}")
     
     try:
         # Method 3: Basic client with minimal configuration
-        print("🔄 Method 3: Minimal OpenAI client...")
+        print("INFO: Method 3: Minimal OpenAI client...")
         client = OpenAI(OPENAI_API_KEY)
-        print("✅ Minimal client initialization successful")
+        print("SUCCESS: Minimal client initialization successful")
         return client
     except Exception as e:
-        print(f"❌ Method 3 failed: {e}")
+        print(f"ERROR: Method 3 failed: {e}")
     
     finally:
         # Restore proxy environment variables
         for var, value in original_proxy_values.items():
             os.environ[var] = value
-            print(f"🔄 Restored proxy env var: {var}")
+            print(f"INFO: Restored proxy env var: {var}")
     
-    print("❌ All OpenAI client initialization methods failed")
+    print("ERROR: All OpenAI client initialization methods failed")
     return None
 
 # Initialize OpenAI client
@@ -142,37 +142,37 @@ def test_openai_connection():
         return False
         
     try:
-        print("🧪 Testing OpenAI connection...")
+        print("INFO: Testing OpenAI connection...")
         # Try a simple models list call first
         models = client.models.list()
-        print("✅ OpenAI models list successful")
+        print("SUCCESS: OpenAI models list successful")
         return True
     except Exception as e:
-        print(f"⚠️ OpenAI connection test failed: {e}")
+        print(f"WARNING: OpenAI connection test failed: {e}")
         
         # Try a basic embedding call as alternative test
         try:
-            print("🧪 Trying alternative connection test...")
+            print("INFO: Trying alternative connection test...")
             response = client.embeddings.create(
                 model="text-embedding-ada-002",
                 input="test connection",
                 timeout=30.0
             )
-            print("✅ OpenAI embedding test successful")
+            print("SUCCESS: OpenAI embedding test successful")
             return True
         except Exception as e2:
-            print(f"❌ All connection tests failed: {e2}")
+            print(f"ERROR: All connection tests failed: {e2}")
             return False
 
 if client:
-    print("✅ OpenAI client ready for use")
+    print("SUCCESS: OpenAI client ready for use")
     connection_ok = test_openai_connection()
     if connection_ok:
-        print("🎯 OpenAI API is fully accessible")
+        print("INFO: OpenAI API is fully accessible")
     else:
-        print("⚠️ OpenAI API connection issues detected")
+        print("WARNING: OpenAI API connection issues detected")
 else:
-    print("❌ OpenAI client not available - RAG functionality will be limited")
+    print("ERROR: OpenAI client not available - RAG functionality will be limited")
 
 # Global variables for RAG system
 candidates_data = []
@@ -184,41 +184,41 @@ def load_candidate_data():
     global candidates_data
     
     # Show current working directory and available files for debugging
-    print(f"🔍 Current working directory: {os.getcwd()}")
+    print(f"INFO: Current working directory: {os.getcwd()}")
     
     try:
         # List files in current directory for debugging
         files = os.listdir('.')
         json_files = [f for f in files if f.endswith('.json')]
-        print(f"📂 Available JSON files: {json_files}")
+        print(f"INFO: Available JSON files: {json_files}")
         
         data_path = os.getenv('DATA_FILE_PATH', 'duvari_NFA_data.json')
-        print(f"🎯 Attempting to load data from: {data_path}")
+        print(f"INFO: Attempting to load data from: {data_path}")
         
         if os.path.exists(data_path):
-            print(f"✅ Found data file at: {data_path}")
+            print(f"SUCCESS: Found data file at: {data_path}")
             with open(data_path, 'r', encoding='utf-8') as f:
                 candidates_data = json.load(f)
         else:
-            print(f"⚠️ Data file not found at {data_path}, trying relative path...")
+            print(f"WARNING: Data file not found at {data_path}, trying relative path...")
             # Fallback to relative path
             with open('duvari_NFA_data.json', 'r', encoding='utf-8') as f:
                 candidates_data = json.load(f)
-            print("✅ Loaded data from relative path")
+            print("SUCCESS: Loaded data from relative path")
         
-        print(f"✅ Successfully loaded {len(candidates_data)} candidates")
+        print(f"SUCCESS: Successfully loaded {len(candidates_data)} candidates")
         
         # Show sample of data for verification
         if candidates_data:
             sample = candidates_data[0]
-            print(f"📋 Sample candidate: {sample.get('FirstName', 'N/A')} {sample.get('LastName', 'N/A')}")
-            print(f"📋 Sample tags: {sample.get('Tags', [])[:3]}...")  # Show first 3 tags
-            print(f"📋 Sample location: {sample.get('City', 'N/A')}, {sample.get('State', 'N/A')}")
+            print(f"INFO: Sample candidate: {sample.get('FirstName', 'N/A')} {sample.get('LastName', 'N/A')}")
+            print(f"INFO: Sample tags: {sample.get('Tags', [])[:3]}...")  # Show first 3 tags
+            print(f"INFO: Sample location: {sample.get('City', 'N/A')}, {sample.get('State', 'N/A')}")
         
         return True
     except Exception as e:
-        print(f"❌ Error loading candidate data: {e}")
-        print(f"❌ Error type: {type(e).__name__}")
+        print(f"ERROR: Error loading candidate data: {e}")
+        print(f"ERROR: Error type: {type(e).__name__}")
         candidates_data = []
         return False
 
@@ -238,7 +238,7 @@ def candidate_to_text(candidate):
 def get_embedding(text):
     """Get OpenAI embedding for text with caching and retry logic"""
     if not client:
-        print("❌ OpenAI client not available")
+        print("ERROR: OpenAI client not available")
         return None
         
     text_hash = hashlib.md5(text.encode()).hexdigest()
@@ -252,7 +252,7 @@ def get_embedding(text):
     
     for attempt in range(max_retries):
         try:
-            print(f"🔄 Attempt {attempt + 1}/{max_retries} - Generating embedding...")
+            print(f"INFO: Attempt {attempt + 1}/{max_retries} - Generating embedding...")
             
             response = client.embeddings.create(
                 model="text-embedding-ada-002",
@@ -261,26 +261,26 @@ def get_embedding(text):
             )
             embedding = response.data[0].embedding
             embedding_cache[text_hash] = embedding
-            print(f"🧠 Generated embedding for: {text[:50]}...")
+            print(f"SUCCESS: Generated embedding for: {text[:50]}...")
             return embedding
             
         except Exception as e:
             error_msg = str(e).lower()
-            print(f"❌ Attempt {attempt + 1} failed: {e}")
+            print(f"ERROR: Attempt {attempt + 1} failed: {e}")
             
             # Check for specific error types
             if "connection" in error_msg or "timeout" in error_msg or "network" in error_msg:
                 if attempt < max_retries - 1:  # Don't wait after last attempt
                     delay = base_delay * (2 ** attempt)  # Exponential backoff
-                    print(f"⏳ Network error, waiting {delay}s before retry...")
+                    print(f"INFO: Network error, waiting {delay}s before retry...")
                     time.sleep(delay)
                     continue
                 else:
-                    print("❌ All retry attempts failed due to network issues")
+                    print("ERROR: All retry attempts failed due to network issues")
                     return None
             else:
                 # For non-network errors, don't retry
-                print(f"❌ Non-network error, not retrying: {e}")
+                print(f"ERROR: Non-network error, not retrying: {e}")
                 return None
     
     return None
@@ -307,7 +307,7 @@ def cosine_similarity(a, b):
 def parse_search_query(query):
     """Parse natural language query using OpenAI"""
     if not client:
-        print("❌ OpenAI client not available, using fallback parsing")
+        print("WARNING: OpenAI client not available, using fallback parsing")
         return fallback_parse(query)
         
     system_prompt = """You are a job search query parser. Convert natural language queries into structured parameters for searching a job applicant database.
@@ -350,11 +350,11 @@ Only include fields that are explicitly mentioned."""
         elif content.startswith('```'):
             content = content[3:-3]
             
-        print(f"🧠 Parsed query: {query} → {content}")
+        print(f"SUCCESS: Parsed query: {query} -> {content}")
         return json.loads(content)
         
     except Exception as e:
-        print(f"❌ Error parsing query: {e}")
+        print(f"ERROR: Error parsing query: {e}")
         return fallback_parse(query)
 
 def fallback_parse(query):
@@ -411,37 +411,37 @@ def fallback_parse(query):
             params['location'] = state.title()
             break
     
-    print(f"🔄 Fallback parsed query: {query} → {params}")
+    print(f"INFO: Fallback parsed query: {query} -> {params}")
     return params
 
 def semantic_search(query, k=10, threshold=0.5, parsed_params=None):
     """Perform on-demand semantic search - only generate embeddings for relevant candidates"""
-    print(f"🔍 Performing on-demand semantic search for: '{query}' (threshold: {threshold})")
+    print(f"INFO: Performing on-demand semantic search for: '{query}' (threshold: {threshold})")
     
     # Get query embedding
     query_embedding = get_embedding(query)
     if not query_embedding:
-        print("❌ Could not get query embedding")
+        print("ERROR: Could not get query embedding")
         return []
     
     # First, filter candidates using keyword criteria to reduce embedding calls
     relevant_candidates = []
     if parsed_params:
-        print(f"🎯 Pre-filtering candidates using parsed params: {parsed_params}")
+        print(f"INFO: Pre-filtering candidates using parsed params: {parsed_params}")
         for candidate in candidates_data:
             if matches_criteria(candidate, parsed_params):
                 relevant_candidates.append(candidate)
-        print(f"📋 Pre-filtered to {len(relevant_candidates)} relevant candidates")
+        print(f"INFO: Pre-filtered to {len(relevant_candidates)} relevant candidates")
     
     # If no keyword matches, use a broader set but limit to reasonable size
     if not relevant_candidates:
-        print("🔄 No keyword matches, using broader candidate set")
+        print("INFO: No keyword matches, using broader candidate set")
         # Limit to first 50 candidates to control costs
         relevant_candidates = candidates_data[:min(50, len(candidates_data))]
-        print(f"📋 Using {len(relevant_candidates)} candidates for semantic search")
+        print(f"INFO: Using {len(relevant_candidates)} candidates for semantic search")
     
     # Generate embeddings on-demand for relevant candidates only
-    print(f"🧠 Generating embeddings for {len(relevant_candidates)} candidates...")
+    print(f"INFO: Generating embeddings for {len(relevant_candidates)} candidates...")
     similarities = []
     successful_embeddings = 0
     
@@ -476,19 +476,19 @@ def semantic_search(query, k=10, threshold=0.5, parsed_params=None):
         
         # Show progress for larger sets
         if len(relevant_candidates) > 10 and (i + 1) % 10 == 0:
-            print(f"📊 Progress: {i+1}/{len(relevant_candidates)} processed, {successful_embeddings} embeddings generated")
+            print(f"INFO: Progress: {i+1}/{len(relevant_candidates)} processed, {successful_embeddings} embeddings generated")
     
-    print(f"💰 Generated {successful_embeddings} new embeddings for this search")
+    print(f"INFO: Generated {successful_embeddings} new embeddings for this search")
     
     # Sort by similarity and return top results
     similarities.sort(key=lambda x: x['similarity'], reverse=True)
     results = similarities[:k]
     
-    print(f"✅ Found {len(results)} semantic matches above threshold {threshold}")
+    print(f"SUCCESS: Found {len(results)} semantic matches above threshold {threshold}")
     
     # If no results with threshold, try with very low threshold
     if not results and similarities:
-        print(f"🔄 No results with threshold {threshold}, trying with lower threshold...")
+        print(f"INFO: No results with threshold {threshold}, trying with lower threshold...")
         low_threshold = max(0.3, threshold * 0.7)
         
         for item in similarities:
@@ -497,7 +497,7 @@ def semantic_search(query, k=10, threshold=0.5, parsed_params=None):
         
         results.sort(key=lambda x: x['similarity'], reverse=True)
         results = results[:k]
-        print(f"✅ Found {len(results)} matches with lower threshold {low_threshold:.3f}")
+        print(f"SUCCESS: Found {len(results)} matches with lower threshold {low_threshold:.3f}")
     
     return results
 
@@ -590,11 +590,11 @@ Include:
         )
         
         formatted_response = response.choices[0].message.content.strip()
-        print(f"🎨 Formatted results for query: {query}")
+        print(f"INFO: Formatted results for query: {query}")
         return formatted_response
         
     except Exception as e:
-        print(f"❌ Error formatting results: {e}")
+        print(f"ERROR: Error formatting results: {e}")
         return f"Found {len(candidates)} candidate{'s' if len(candidates) != 1 else ''} matching your criteria."
 
 # Routes
@@ -614,7 +614,7 @@ def search():
         if not query:
             return jsonify({'error': 'Query is required'}), 400
         
-        print(f"🔍 Processing search: '{query}' (type: {search_type})")
+        print(f"INFO: Processing search: '{query}' (type: {search_type})")
         
         # Parse query with OpenAI
         parsed_params = parse_search_query(query)
@@ -666,11 +666,11 @@ def search():
             }
         }
         
-        print(f"✅ Search completed: {len(candidates)} candidates found")
+        print(f"SUCCESS: Search completed: {len(candidates)} candidates found")
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Search error: {e}")
+        print(f"ERROR: Search error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/rag-search', methods=['POST'])
@@ -685,7 +685,7 @@ def rag_search():
         if not query:
             return jsonify({'error': 'Query is required'}), 400
         
-        print(f"🧠 RAG Search: '{query}' (k={k}, threshold={threshold})")
+        print(f"INFO: RAG Search: '{query}' (k={k}, threshold={threshold})")
         
         start_time = time.time()
         results = semantic_search(query, k=k, threshold=threshold)
@@ -704,7 +704,7 @@ def rag_search():
         })
         
     except Exception as e:
-        print(f"❌ RAG search error: {e}")
+        print(f"ERROR: RAG search error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/stats')
@@ -752,21 +752,21 @@ def clear_cache():
         return jsonify({'error': str(e)}), 500
 
 # Initialize system on startup (runs for both gunicorn and direct execution)
-print("🚀 Starting Duvari RAG Candidate Search System...")
+print("INFO: Starting Duvari RAG Candidate Search System...")
 
 # Load data
 if load_candidate_data():
-    print("✅ Candidate data loaded")
+    print("SUCCESS: Candidate data loaded")
 else:
-    print("❌ Failed to load candidate data")
+    print("ERROR: Failed to load candidate data")
 
 # Skip bulk vector index building - generate embeddings on-demand during searches
-print("🎯 Vector embeddings will be generated on-demand during searches")
-print(f"🎯 System ready with {len(candidates_data)} candidates loaded")
-print(f"💰 Cost-optimized: Only generating embeddings for searched candidates")
+print("INFO: Vector embeddings will be generated on-demand during searches")
+print(f"INFO: System ready with {len(candidates_data)} candidates loaded")
+print("INFO: Cost-optimized: Only generating embeddings for searched candidates")
 
 # Only run Flask directly if called as main script
 if __name__ == '__main__':
-    print("🌐 Starting Flask server directly...")
+    print("INFO: Starting Flask server directly...")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
