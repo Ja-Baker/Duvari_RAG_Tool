@@ -642,13 +642,13 @@ def search():
                 if len(results) >= 10:  # Limit to top 10
                     break
         
-        # Format results with OpenAI
-        formatted_response = format_results(results, query)
-        
         # Extract just candidates for response
         candidates = [r.get('candidate', r) for r in results]
         similarities = [r.get('similarity', 0) for r in results]
         relevance_scores = [r.get('relevance_score', 0) for r in results]
+        
+        # Mark results as AI certified if they came from semantic search
+        ai_certified = [search_type in ['semantic', 'hybrid'] and r.get('similarity', 0) > 0 for r in results]
         
         response_data = {
             'query': query,
@@ -657,7 +657,7 @@ def search():
             'candidates': candidates,
             'similarities': similarities,
             'relevance_scores': relevance_scores,
-            'formatted_response': formatted_response,
+            'ai_certified': ai_certified,
             'count': len(candidates),
             'metadata': {
                 'vector_index_size': len(vector_index),

@@ -222,6 +222,17 @@
             font-size: 12px;
         }
         
+        .ai-certified-tag {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+            display: inline-block;
+        }
+        
         .loading {
             text-align: center;
             padding: 40px;
@@ -425,27 +436,20 @@
                 </div>
             `;
             
-            // Display AI-formatted response
-            if (data.formatted_response) {
-                html += `
-                    <div class="ai-response">
-                        <strong>AI Analysis:</strong><br>
-                        ${data.formatted_response.replace(/\n/g, '<br>')}
-                    </div>
-                `;
-            }
             
             // Display individual candidates
             if (data.candidates && data.candidates.length > 0) {
                 data.candidates.forEach((candidate, index) => {
                     const relevanceScore = data.relevance_scores?.[index] || 0;
                     const similarity = data.similarities?.[index] || 0;
+                    const aiCertified = data.ai_certified?.[index] || false;
                     
                     html += `
                         <div class="candidate-card">
                             <div class="relevance-score">${relevanceScore}% match</div>
                             <div class="candidate-name">
                                 ${candidate.FirstName} ${candidate.LastName}
+                                ${aiCertified ? '<span class="ai-certified-tag">🤖 AI Certified</span>' : ''}
                             </div>
                             
                             <div class="candidate-details">
