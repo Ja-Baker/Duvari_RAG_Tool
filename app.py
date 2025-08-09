@@ -82,38 +82,44 @@ def initialize_openai_client():
     try:
         # Method 1: Clean initialization without any proxy interference
         print("🔄 Method 1: Clean OpenAI client initialization...")
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=60.0,  # Increase timeout for Railway
+            max_retries=3
+        )
         print("✅ Clean OpenAI client initialization successful")
         return client
     except Exception as e:
         print(f"❌ Method 1 failed: {e}")
     
     try:
-        # Method 2: Force no proxy configuration
-        print("🔄 Method 2: OpenAI client with explicit no-proxy configuration...")
+        # Method 2: Custom HTTP client with Railway-friendly settings
+        print("🔄 Method 2: Railway-optimized HTTP client...")
         import httpx
         
-        # Create a custom HTTP client with no proxy
-        http_client = httpx.Client(proxies={})
+        # Create HTTP client with extended timeouts for Railway
+        http_client = httpx.Client(
+            proxies={},
+            timeout=httpx.Timeout(60.0, connect=30.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            follow_redirects=True
+        )
         
         client = OpenAI(
             api_key=OPENAI_API_KEY,
-            http_client=http_client
+            http_client=http_client,
+            max_retries=5
         )
-        print("✅ No-proxy OpenAI client initialization successful")
+        print("✅ Railway-optimized client initialization successful")
         return client
     except Exception as e:
         print(f"❌ Method 2 failed: {e}")
     
     try:
-        # Method 3: Use requests-based approach
-        print("🔄 Method 3: Alternative HTTP client initialization...")
-        client = OpenAI(
-            api_key=OPENAI_API_KEY,
-            timeout=30.0,
-            max_retries=2
-        )
-        print("✅ Alternative HTTP client initialization successful")
+        # Method 3: Basic client with minimal configuration
+        print("🔄 Method 3: Minimal OpenAI client...")
+        client = OpenAI(OPENAI_API_KEY)
+        print("✅ Minimal client initialization successful")
         return client
     except Exception as e:
         print(f"❌ Method 3 failed: {e}")
@@ -130,14 +136,41 @@ def initialize_openai_client():
 # Initialize OpenAI client
 client = initialize_openai_client()
 
+def test_openai_connection():
+    """Test OpenAI connection with simple API call"""
+    if not client:
+        return False
+        
+    try:
+        print("🧪 Testing OpenAI connection...")
+        # Try a simple models list call first
+        models = client.models.list()
+        print("✅ OpenAI models list successful")
+        return True
+    except Exception as e:
+        print(f"⚠️ OpenAI connection test failed: {e}")
+        
+        # Try a basic embedding call as alternative test
+        try:
+            print("🧪 Trying alternative connection test...")
+            response = client.embeddings.create(
+                model="text-embedding-ada-002",
+                input="test connection",
+                timeout=30.0
+            )
+            print("✅ OpenAI embedding test successful")
+            return True
+        except Exception as e2:
+            print(f"❌ All connection tests failed: {e2}")
+            return False
+
 if client:
     print("✅ OpenAI client ready for use")
-    # Quick test
-    try:
-        models = client.models.list()
-        print("✅ OpenAI client API test successful")
-    except Exception as test_error:
-        print(f"⚠️ OpenAI client API test failed: {test_error}")
+    connection_ok = test_openai_connection()
+    if connection_ok:
+        print("🎯 OpenAI API is fully accessible")
+    else:
+        print("⚠️ OpenAI API connection issues detected")
 else:
     print("❌ OpenAI client not available - RAG functionality will be limited")
 
@@ -203,7 +236,7 @@ def candidate_to_text(candidate):
     return '. '.join(filter(None, parts))
 
 def get_embedding(text):
-    """Get OpenAI embedding for text with caching"""
+    """Get OpenAI embedding for text with caching and retry logic"""
     if not client:
         print("❌ OpenAI client not available")
         return None
@@ -213,18 +246,44 @@ def get_embedding(text):
     if text_hash in embedding_cache:
         return embedding_cache[text_hash]
     
-    try:
-        response = client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=text
-        )
-        embedding = response.data[0].embedding
-        embedding_cache[text_hash] = embedding
-        print(f"🧠 Generated embedding for: {text[:50]}...")
-        return embedding
-    except Exception as e:
-        print(f"❌ Error generating embedding: {e}")
-        return None
+    # Retry logic with exponential backoff
+    max_retries = 3
+    base_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Attempt {attempt + 1}/{max_retries} - Generating embedding...")
+            
+            response = client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=text,
+                timeout=60.0  # Increase timeout
+            )
+            embedding = response.data[0].embedding
+            embedding_cache[text_hash] = embedding
+            print(f"🧠 Generated embedding for: {text[:50]}...")
+            return embedding
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"❌ Attempt {attempt + 1} failed: {e}")
+            
+            # Check for specific error types
+            if "connection" in error_msg or "timeout" in error_msg or "network" in error_msg:
+                if attempt < max_retries - 1:  # Don't wait after last attempt
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"⏳ Network error, waiting {delay}s before retry...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print("❌ All retry attempts failed due to network issues")
+                    return None
+            else:
+                # For non-network errors, don't retry
+                print(f"❌ Non-network error, not retrying: {e}")
+                return None
+    
+    return None
 
 def cosine_similarity(a, b):
     """Calculate cosine similarity between two vectors"""
@@ -243,46 +302,7 @@ def cosine_similarity(a, b):
         
         return dot_product / (norm_a * norm_b)
 
-def build_vector_index():
-    """Build vector index for all candidates - THIS MAKES OPENAI API CALLS"""
-    global vector_index
-    print("🔧 Building vector index...")
-    print(f"🔧 Processing {len(candidates_data)} candidates...")
-    
-    if not client:
-        print("❌ No OpenAI client available - cannot build vector index")
-        return
-    
-    successful_embeddings = 0
-    failed_embeddings = 0
-    
-    for i, candidate in enumerate(candidates_data):
-        contact_id = candidate.get('ContactId')
-        if contact_id:
-            text = candidate_to_text(candidate)
-            print(f"🔄 [{i+1}/{len(candidates_data)}] Processing: {candidate.get('FirstName', 'Unknown')} {candidate.get('LastName', 'Unknown')}")
-            
-            embedding = get_embedding(text)
-            if embedding:
-                vector_index[contact_id] = {
-                    'embedding': embedding,
-                    'candidate': candidate,
-                    'text': text
-                }
-                successful_embeddings += 1
-                print(f"✅ [{i+1}/{len(candidates_data)}] Embedding created successfully")
-            else:
-                failed_embeddings += 1
-                print(f"❌ [{i+1}/{len(candidates_data)}] Failed to create embedding")
-        
-        # Show progress every 10 candidates
-        if (i + 1) % 10 == 0:
-            print(f"📊 Progress: {i+1}/{len(candidates_data)} processed, {successful_embeddings} successful, {failed_embeddings} failed")
-    
-    print(f"✅ Vector index build complete!")
-    print(f"📊 Final stats: {successful_embeddings} successful embeddings, {failed_embeddings} failed")
-    print(f"📊 Vector index size: {len(vector_index)} candidates")
-    print(f"💰 OpenAI API calls made: {successful_embeddings} embedding requests")
+# Removed bulk vector index building - now using on-demand embedding generation
 
 def parse_search_query(query):
     """Parse natural language query using OpenAI"""
@@ -394,9 +414,9 @@ def fallback_parse(query):
     print(f"🔄 Fallback parsed query: {query} → {params}")
     return params
 
-def semantic_search(query, k=10, threshold=0.5):
-    """Perform semantic search using vector similarity with lower threshold"""
-    print(f"🔍 Performing semantic search for: '{query}' (threshold: {threshold})")
+def semantic_search(query, k=10, threshold=0.5, parsed_params=None):
+    """Perform on-demand semantic search - only generate embeddings for relevant candidates"""
+    print(f"🔍 Performing on-demand semantic search for: '{query}' (threshold: {threshold})")
     
     # Get query embedding
     query_embedding = get_embedding(query)
@@ -404,54 +424,79 @@ def semantic_search(query, k=10, threshold=0.5):
         print("❌ Could not get query embedding")
         return []
     
-    print(f"🧠 Query embedding generated, searching {len(vector_index)} candidates")
+    # First, filter candidates using keyword criteria to reduce embedding calls
+    relevant_candidates = []
+    if parsed_params:
+        print(f"🎯 Pre-filtering candidates using parsed params: {parsed_params}")
+        for candidate in candidates_data:
+            if matches_criteria(candidate, parsed_params):
+                relevant_candidates.append(candidate)
+        print(f"📋 Pre-filtered to {len(relevant_candidates)} relevant candidates")
     
-    # Calculate similarities
+    # If no keyword matches, use a broader set but limit to reasonable size
+    if not relevant_candidates:
+        print("🔄 No keyword matches, using broader candidate set")
+        # Limit to first 50 candidates to control costs
+        relevant_candidates = candidates_data[:min(50, len(candidates_data))]
+        print(f"📋 Using {len(relevant_candidates)} candidates for semantic search")
+    
+    # Generate embeddings on-demand for relevant candidates only
+    print(f"🧠 Generating embeddings for {len(relevant_candidates)} candidates...")
     similarities = []
-    all_similarities = []  # Track all similarities for debugging
+    successful_embeddings = 0
     
-    for contact_id, data in vector_index.items():
-        similarity = cosine_similarity(query_embedding, data['embedding'])
-        all_similarities.append(similarity)
+    for i, candidate in enumerate(relevant_candidates):
+        contact_id = candidate.get('ContactId')
+        if not contact_id:
+            continue
+            
+        # Check if embedding is already cached
+        text = candidate_to_text(candidate)
+        text_hash = hashlib.md5(text.encode()).hexdigest()
         
-        if similarity >= threshold:
-            similarities.append({
-                'candidate': data['candidate'],
-                'similarity': similarity,
-                'relevance_score': int(similarity * 100),
-                'text': data['text']
-            })
+        candidate_embedding = None
+        if text_hash in embedding_cache:
+            candidate_embedding = embedding_cache[text_hash]
+        else:
+            # Generate embedding on-demand
+            candidate_embedding = get_embedding(text)
+            if candidate_embedding:
+                successful_embeddings += 1
+        
+        if candidate_embedding:
+            similarity = cosine_similarity(query_embedding, candidate_embedding)
+            
+            if similarity >= threshold:
+                similarities.append({
+                    'candidate': candidate,
+                    'similarity': similarity,
+                    'relevance_score': int(similarity * 100),
+                    'text': text
+                })
+        
+        # Show progress for larger sets
+        if len(relevant_candidates) > 10 and (i + 1) % 10 == 0:
+            print(f"📊 Progress: {i+1}/{len(relevant_candidates)} processed, {successful_embeddings} embeddings generated")
     
-    # Show similarity distribution for debugging
-    if all_similarities:
-        max_sim = max(all_similarities)
-        min_sim = min(all_similarities)
-        avg_sim = sum(all_similarities) / len(all_similarities)
-        print(f"📊 Similarity stats: min={min_sim:.3f}, max={max_sim:.3f}, avg={avg_sim:.3f}")
+    print(f"💰 Generated {successful_embeddings} new embeddings for this search")
     
-    # Sort by similarity
+    # Sort by similarity and return top results
     similarities.sort(key=lambda x: x['similarity'], reverse=True)
     results = similarities[:k]
     
     print(f"✅ Found {len(results)} semantic matches above threshold {threshold}")
     
-    # If no results with threshold, try with very low threshold to get something
-    if not results and all_similarities:
+    # If no results with threshold, try with very low threshold
+    if not results and similarities:
         print(f"🔄 No results with threshold {threshold}, trying with lower threshold...")
-        low_threshold = max(0.3, max(all_similarities) * 0.7)  # 70% of best match or 0.3
+        low_threshold = max(0.3, threshold * 0.7)
         
-        for contact_id, data in vector_index.items():
-            similarity = cosine_similarity(query_embedding, data['embedding'])
-            if similarity >= low_threshold:
-                similarities.append({
-                    'candidate': data['candidate'],
-                    'similarity': similarity,
-                    'relevance_score': int(similarity * 100),
-                    'text': data['text']
-                })
+        for item in similarities:
+            if item['similarity'] >= low_threshold:
+                results.append(item)
         
-        similarities.sort(key=lambda x: x['similarity'], reverse=True)
-        results = similarities[:k]
+        results.sort(key=lambda x: x['similarity'], reverse=True)
+        results = results[:k]
         print(f"✅ Found {len(results)} matches with lower threshold {low_threshold:.3f}")
     
     return results
@@ -576,11 +621,11 @@ def search():
         
         # Perform search based on type with more lenient thresholds
         if search_type == 'semantic':
-            results = semantic_search(query, k=10, threshold=0.4)
+            results = semantic_search(query, k=10, threshold=0.4, parsed_params=parsed_params)
         elif search_type == 'keyword':
             results = keyword_search(query, parsed_params)
         else:  # hybrid
-            semantic_results = semantic_search(query, k=8, threshold=0.4)
+            semantic_results = semantic_search(query, k=8, threshold=0.4, parsed_params=parsed_params)
             keyword_results = keyword_search(query, parsed_params)
             
             # Merge results (semantic gets priority)
@@ -667,9 +712,11 @@ def get_stats():
     """Get system statistics"""
     return jsonify({
         'total_candidates': len(candidates_data),
-        'vector_index_size': len(vector_index),
         'embedding_cache_size': len(embedding_cache),
-        'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+        'openai_configured': bool(OPENAI_API_KEY),
+        'openai_client_ready': client is not None,
+        'system_mode': 'on-demand embedding generation',
+        'cost_optimization': 'embeddings generated only during searches',
         'system_status': 'operational'
     })
 
@@ -679,24 +726,27 @@ def health():
     return jsonify({
         'status': 'healthy',
         'candidates_loaded': len(candidates_data),
-        'vector_index_ready': len(vector_index) > 0,
+        'embedding_cache_size': len(embedding_cache),
         'openai_configured': bool(OPENAI_API_KEY),
         'openai_client_ready': client is not None,
+        'system_mode': 'on-demand embeddings',
+        'cost_optimized': True,
         'total_env_vars': len(os.environ),
-        'openai_env_vars': [k for k in os.environ.keys() if 'OPENAI' in k.upper()],
         'port': os.getenv('PORT', 'not set'),
         'timestamp': datetime.now().isoformat()
     })
 
-@app.route('/rebuild-index', methods=['POST'])
-def rebuild_index():
-    """Rebuild the vector index"""
+@app.route('/clear-cache', methods=['POST'])
+def clear_cache():
+    """Clear embedding cache"""
     try:
-        build_vector_index()
+        global embedding_cache
+        cache_size = len(embedding_cache)
+        embedding_cache = {}
         return jsonify({
             'status': 'success',
-            'vector_count': len(vector_index),
-            'message': 'Vector index rebuilt successfully'
+            'message': f'Cleared {cache_size} cached embeddings',
+            'cache_size': 0
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -710,14 +760,10 @@ if load_candidate_data():
 else:
     print("❌ Failed to load candidate data")
 
-# Build vector index (this will make OpenAI API calls!)
-if candidates_data:
-    build_vector_index()
-    print("✅ Vector index built")
-else:
-    print("⚠️  No candidates to index")
-
-print(f"🎯 System ready with {len(candidates_data)} candidates and {len(vector_index)} vectors")
+# Skip bulk vector index building - generate embeddings on-demand during searches
+print("🎯 Vector embeddings will be generated on-demand during searches")
+print(f"🎯 System ready with {len(candidates_data)} candidates loaded")
+print(f"💰 Cost-optimized: Only generating embeddings for searched candidates")
 
 # Only run Flask directly if called as main script
 if __name__ == '__main__':
